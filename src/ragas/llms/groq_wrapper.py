@@ -1,10 +1,3 @@
-"""
-Groq-specific LLM wrapper for ragas.
-
-Groq's inference is fast enough to hit rate limits quickly.
-This wrapper handles that gracefully.
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -22,27 +15,23 @@ if t.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# default RPM on Groq free tier
 _DEFAULT_GROQ_RPM = 30
 
 
 class GroqLLMWrapper(BaseRagasLLM):
     """Ragas LLM wrapper for Groq.
 
-    Groq's speed is great, but rate limits and JSON-in-markdown
-    responses can break evaluations silently. This wrapper fixes both.
+    Handles Groq's RPM rate limits and JSON responses occasionally
+    wrapped in markdown fences.
 
     Args:
-        groq_llm: A LangChain-compatible Groq LLM instance
-                  (e.g., ChatGroq from langchain_groq).
-        requests_per_minute: Groq RPM cap for your tier. Controls
-                             the async semaphore. Default: 30.
+        groq_llm: A LangChain-compatible Groq LLM instance.
+        requests_per_minute: Groq RPM cap. Controls the async semaphore.
     """
 
     def __init__(self, groq_llm: t.Any, requests_per_minute: int = _DEFAULT_GROQ_RPM):
         super().__init__()
         self.groq_llm = groq_llm
-        # semaphore limits concurrent async requests
         self._semaphore = asyncio.Semaphore(requests_per_minute)
 
     def _clean_json_response(self, text: str) -> str:
@@ -51,7 +40,6 @@ class GroqLLMWrapper(BaseRagasLLM):
         return match.group(1).strip() if match else text
 
     def is_finished(self, response: LLMResult) -> bool:
-        # Groq uses standard finish_reason values
         for gen_list in response.generations:
             for gen in gen_list:
                 info = getattr(gen, "generation_info", None) or {}
@@ -75,11 +63,9 @@ class GroqLLMWrapper(BaseRagasLLM):
                 stop=stop,
                 callbacks=callbacks,
             )
-            # clean any markdown-fenced JSON before returning
             for gen in response.generations[0]:
                 gen.text = self._clean_json_response(gen.text)
             results.extend(response.generations[0])
-
         return LLMResult(generations=[results])
 
     async def agenerate_text(
@@ -103,7 +89,7 @@ class GroqLLMWrapper(BaseRagasLLM):
         callbacks: Callbacks,
         _retries: int = 3,
     ) -> t.List[Generation]:
-        """Single async call with rate-limit handling."""
+        """Single async call with semaphore and rate-limit retry."""
         async with self._semaphore:
             for attempt in range(_retries):
                 try:
@@ -117,7 +103,6 @@ class GroqLLMWrapper(BaseRagasLLM):
                         gen.text = self._clean_json_response(gen.text)
                     return gens
                 except Exception as exc:
-                    # back off on rate limit before retrying
                     is_rate_limit = "429" in str(exc) or "rate_limit" in str(exc).lower()
                     if is_rate_limit and attempt < _retries - 1:
                         wait = 60 * (attempt + 1)
@@ -130,8 +115,6 @@ class GroqLLMWrapper(BaseRagasLLM):
                         await asyncio.sleep(wait)
                     else:
                         raise
-
-        # unreachable, but makes type checkers happy
         return []
 
     def __repr__(self) -> str:
