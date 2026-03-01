@@ -1,8 +1,8 @@
 """
 Groq-specific LLM wrapper for ragas.
 
-Groq's inference is blazing fast — itna fast ki 429 rate limit errors
-aate hain jaldi. This wrapper handles that gracefully.
+Groq's inference is fast enough to hit rate limits quickly.
+This wrapper handles that gracefully.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ if t.TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# default RPM Groq deta hai free tier pe
+# default RPM on Groq free tier
 _DEFAULT_GROQ_RPM = 30
 
 
@@ -42,16 +42,16 @@ class GroqLLMWrapper(BaseRagasLLM):
     def __init__(self, groq_llm: t.Any, requests_per_minute: int = _DEFAULT_GROQ_RPM):
         super().__init__()
         self.groq_llm = groq_llm
-        # semaphore se concurrent requests control hoti hain
+        # semaphore limits concurrent async requests
         self._semaphore = asyncio.Semaphore(requests_per_minute)
 
     def _clean_json_response(self, text: str) -> str:
-        """Strip markdown fences Groq kabhi kabhi wrap kar deta hai."""
+        """Strip markdown fences that Groq occasionally wraps around JSON."""
         match = re.search(r"```(?:json)?\s*([\s\S]+?)\s*```", text)
         return match.group(1).strip() if match else text
 
     def is_finished(self, response: LLMResult) -> bool:
-        # Groq standard finish_reason use karta hai
+        # Groq uses standard finish_reason values
         for gen_list in response.generations:
             for gen in gen_list:
                 info = getattr(gen, "generation_info", None) or {}
@@ -117,7 +117,7 @@ class GroqLLMWrapper(BaseRagasLLM):
                         gen.text = self._clean_json_response(gen.text)
                     return gens
                 except Exception as exc:
-                    # 429 pe thoda rest karo
+                    # back off on rate limit before retrying
                     is_rate_limit = "429" in str(exc) or "rate_limit" in str(exc).lower()
                     if is_rate_limit and attempt < _retries - 1:
                         wait = 60 * (attempt + 1)
