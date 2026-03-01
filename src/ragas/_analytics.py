@@ -38,14 +38,12 @@ USAGE_TRACKING_URL = "https://t.explodinggradients.com"
 USAGE_REQUESTS_TIMEOUT_SEC = 1
 USER_DATA_DIR_NAME = "ragas"
 # Any chance you chance this also change the variable in our ci.yaml file
-# all standard opt-out vars, any one set will disable tracking
 _DO_NOT_TRACK_VARS = ("RAGAS_DO_NOT_TRACK", "DO_NOT_TRACK", "DISABLE_TELEMETRY")
 RAGAS_DEBUG_TRACKING = "__RAGAS_DEBUG_TRACKING"
 
 
 @lru_cache(maxsize=1)
 def do_not_track() -> bool:  # pragma: no cover
-    # cached for performance, checked only once per process
     return any(
         os.environ.get(var, "").strip().lower() in ("1", "true")
         for var in _DO_NOT_TRACK_VARS
