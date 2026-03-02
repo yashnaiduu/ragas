@@ -173,7 +173,7 @@ from ragas import evaluate
 from ragas.llms import llm_factory
 from ragas.metrics import LLMContextRecall, Faithfulness, FactualCorrectness
 
-# llm_factory recommended hai, LangchainLLMWrapper ab deprecated hai
+# Use llm_factory to create the evaluator LLM instance
 openai_client = openai.OpenAI()
 evaluator_llm = llm_factory("gpt-4o", client=openai_client)
 
